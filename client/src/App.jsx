@@ -46,6 +46,17 @@ export default function App() {
   const monthChoices = useMemo(() => monthOptions(), []);
   const [selected, setSelected] = useState(monthChoices[0]);
 
+  const [auth, setAuth] = useState(() => {
+    try {
+      const raw = localStorage.getItem('auth');
+      return raw ? JSON.parse(raw) : { token: '', user: null };
+    } catch {
+      return { token: '', user: null };
+    }
+  });
+  const [authModal, setAuthModal] = useState({ open: false, mode: 'login' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+
   const [categories, setCategories] = useState([]);
   const [tx, setTx] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -73,6 +84,14 @@ export default function App() {
   const [budgetAmount, setBudgetAmount] = useState('');
 
   const [monthlySummary, setMonthlySummary] = useState(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('auth', JSON.stringify(auth));
+    } catch {
+      // ignore
+    }
+  }, [auth]);
 
   async function refreshAll() {
     setError('');
@@ -317,6 +336,36 @@ export default function App() {
     }
   }
 
+  async function submitAuth(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      if (authModal.mode === 'signup') {
+        const res = await api.signup({
+          name: authForm.name,
+          email: authForm.email,
+          password: authForm.password,
+        });
+        setAuth({ token: res.token, user: res.user });
+      } else {
+        const res = await api.login({
+          email: authForm.email,
+          password: authForm.password,
+        });
+        setAuth({ token: res.token, user: res.user });
+      }
+
+      setAuthModal({ open: false, mode: 'login' });
+      setAuthForm({ name: '', email: '', password: '' });
+    } catch (e2) {
+      setError(e2.message || 'Auth failed');
+    }
+  }
+
+  function logout() {
+    setAuth({ token: '', user: null });
+  }
+
   return (
     <div className="container">
       <div className="header">
@@ -328,7 +377,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="row">
+        <div className="row" style={{ alignItems: 'flex-end', justifyContent: 'flex-end' }}>
           <div className="field" style={{ minWidth: 220 }}>
             <label>Month</label>
             <select
@@ -360,8 +409,125 @@ export default function App() {
               <option value="expense">Expense</option>
             </select>
           </div>
+
+          {auth?.user ? (
+            <div className="field" style={{ minWidth: 220 }}>
+              <label>Account</label>
+              <div className="row" style={{ justifyContent: 'flex-end' }}>
+                <span className="badge" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {auth.user.name || auth.user.email}
+                </span>
+                <button type="button" className="danger" onClick={logout}>
+                  Logout
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="field" style={{ minWidth: 220 }}>
+              <label>Account</label>
+              <div className="row" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setAuthModal({ open: true, mode: 'login' });
+                    setAuthForm({ name: '', email: '', password: '' });
+                  }}
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModal({ open: true, mode: 'signup' });
+                    setAuthForm({ name: '', email: '', password: '' });
+                  }}
+                >
+                  Signup
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {authModal.open ? (
+        <div
+          role="presentation"
+          onClick={() => setAuthModal({ open: false, mode: 'login' })}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16,
+            zIndex: 50,
+          }}
+        >
+          <div
+            className="panel"
+            role="presentation"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 'min(520px, 100%)' }}
+          >
+            <div className="panelInner">
+              <div className="subtitle" style={{ marginBottom: 10 }}>
+                {authModal.mode === 'signup' ? 'Create account' : 'Login'}
+              </div>
+              <form onSubmit={submitAuth}>
+                {authModal.mode === 'signup' ? (
+                  <div className="field">
+                    <label>Name</label>
+                    <input
+                      value={authForm.name}
+                      onChange={(e) => setAuthForm((f) => ({ ...f, name: e.target.value }))}
+                      required
+                    />
+                  </div>
+                ) : null}
+
+                <div className="field">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={authForm.email}
+                    onChange={(e) => setAuthForm((f) => ({ ...f, email: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="field">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    value={authForm.password}
+                    onChange={(e) => setAuthForm((f) => ({ ...f, password: e.target.value }))}
+                    required
+                    minLength={6}
+                  />
+                </div>
+
+                <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      setAuthModal((m) => ({
+                        open: true,
+                        mode: m.mode === 'signup' ? 'login' : 'signup',
+                      }))
+                    }
+                  >
+                    {authModal.mode === 'signup' ? 'Have an account? Login' : 'New? Signup'}
+                  </button>
+                  <button type="submit">Continue</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="alert danger">{error}</div> : null}
       {budgetAlert ? <div className={`alert ${budgetAlert.kind}`}>{budgetAlert.text}</div> : null}

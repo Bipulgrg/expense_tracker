@@ -4,6 +4,7 @@ async function request(path, options) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(options?.token ? { Authorization: `Bearer ${options.token}` } : {}),
       ...(options?.headers || {}),
     },
     ...options,
@@ -23,6 +24,13 @@ async function request(path, options) {
 }
 
 export const api = {
+  signup(payload) {
+    return request('/auth/signup', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  login(payload) {
+    return request('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   listCategories() {
     return request('/categories');
   },
