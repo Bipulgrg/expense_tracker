@@ -373,7 +373,7 @@ export default function App() {
           <div className="logo" />
           <div>
             <div className="h1">Expense Tracker</div>
-            <div className="subtitle">MERN • Transactions • Charts • Budgets</div>
+            <div className="subtitle">Transactions • Charts • Budgets</div>
           </div>
         </div>
 
