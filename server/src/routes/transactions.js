@@ -7,8 +7,11 @@ import {
   updateTransactionSchema,
 } from '../lib/validation.js';
 import { httpError } from '../lib/httpError.js';
+import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 function parseDateInput(value) {
   // supports full ISO or YYYY-MM-DD
@@ -29,7 +32,7 @@ router.get('/', async (req, res, next) => {
       limit = '50',
     } = req.query;
 
-    const filter = {};
+    const filter = { userId: req.user.sub };
 
     if (from || to) {
       filter.date = {};
@@ -76,13 +79,14 @@ router.post('/', async (req, res, next) => {
     if (categoryId === null) categoryId = undefined;
 
     if (categoryId) {
-      const exists = await Category.exists({ _id: categoryId });
+      const exists = await Category.exists({ _id: categoryId, userId: req.user.sub });
       if (!exists) {
         throw httpError(400, 'Category does not exist');
       }
     }
 
     const tx = await Transaction.create({
+      userId: req.user.sub,
       type: payload.type,
       amount: payload.amount,
       note: payload.note ?? '',
@@ -112,13 +116,13 @@ router.patch('/:id', async (req, res, next) => {
     }
 
     if (payload.categoryId) {
-      const exists = await Category.exists({ _id: payload.categoryId });
+      const exists = await Category.exists({ _id: payload.categoryId, userId: req.user.sub });
       if (!exists) {
         throw httpError(400, 'Category does not exist');
       }
     }
 
-    const tx = await Transaction.findByIdAndUpdate(id, update, { new: true });
+    const tx = await Transaction.findOneAndUpdate({ _id: id, userId: req.user.sub }, update, { new: true });
     if (!tx) {
       throw httpError(404, 'Transaction not found');
     }
@@ -133,7 +137,7 @@ router.delete('/:id', async (req, res, next) => {
   try {
     const id = objectIdSchema.parse(req.params.id);
 
-    const tx = await Transaction.findByIdAndDelete(id);
+    const tx = await Transaction.findOneAndDelete({ _id: id, userId: req.user.sub });
     if (!tx) {
       throw httpError(404, 'Transaction not found');
     }
@@ -158,6 +162,7 @@ router.get('/summary/monthly', async (req, res, next) => {
     const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
 
     const match = {
+      userId: req.user.sub,
       date: {
         $gte: start,
         $lt: end,

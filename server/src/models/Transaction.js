@@ -2,6 +2,12 @@ import mongoose from 'mongoose';
 
 const TransactionSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
     type: {
       type: String,
       enum: ['income', 'expense'],
@@ -30,7 +36,7 @@ const TransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-TransactionSchema.index({ date: -1 });
-TransactionSchema.index({ type: 1, date: -1 });
+TransactionSchema.index({ userId: 1, date: -1 });
+TransactionSchema.index({ userId: 1, type: 1, date: -1 });
 
 export const Transaction = mongoose.model('Transaction', TransactionSchema);

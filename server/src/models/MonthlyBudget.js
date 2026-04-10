@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const MonthlyBudgetSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     year: { type: Number, required: true },
     month: { type: Number, required: true, min: 1, max: 12 },
     amount: { type: Number, required: true, min: 0 },
@@ -9,6 +10,6 @@ const MonthlyBudgetSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-MonthlyBudgetSchema.index({ year: 1, month: 1 }, { unique: true });
+MonthlyBudgetSchema.index({ userId: 1, year: 1, month: 1 }, { unique: true });
 
 export const MonthlyBudget = mongoose.model('MonthlyBudget', MonthlyBudgetSchema);

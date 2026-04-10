@@ -2,11 +2,16 @@ import mongoose from 'mongoose';
 
 const CategorySchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
       trim: true,
-      unique: true,
     },
     color: {
       type: String,
@@ -15,5 +20,7 @@ const CategorySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+CategorySchema.index({ userId: 1, name: 1 }, { unique: true });
 
 export const Category = mongoose.model('Category', CategorySchema);

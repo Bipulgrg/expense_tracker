@@ -85,6 +85,8 @@ export default function App() {
 
   const [monthlySummary, setMonthlySummary] = useState(null);
 
+  const isAuthed = Boolean(auth?.token);
+
   useEffect(() => {
     try {
       localStorage.setItem('auth', JSON.stringify(auth));
@@ -95,17 +97,25 @@ export default function App() {
 
   async function refreshAll() {
     setError('');
+    if (!isAuthed) {
+      setCategories([]);
+      setTx([]);
+      setMonthlySummary(null);
+      setBudget(null);
+      setBudgetAmount('');
+      return;
+    }
     setLoading(true);
     try {
       const [catsRes, txRes, sumRes, budgetRes] = await Promise.all([
-        api.listCategories(),
+        api.listCategories(auth.token),
         api.listTransactions({
           ...filters,
           page: 1,
           limit: 100,
-        }),
-        api.monthlySummary(selected.year, selected.month),
-        api.getBudget(selected.year, selected.month),
+        }, auth.token),
+        api.monthlySummary(selected.year, selected.month, auth.token),
+        api.getBudget(selected.year, selected.month, auth.token),
       ]);
 
       setCategories(catsRes.categories);
@@ -114,7 +124,17 @@ export default function App() {
       setBudget(budgetRes.budget);
       setBudgetAmount(budgetRes.budget?.amount != null ? String(budgetRes.budget.amount) : '');
     } catch (e) {
-      setError(e.message || 'Failed to load');
+      if (e?.status === 401) {
+        setAuth({ token: '', user: null });
+        setCategories([]);
+        setTx([]);
+        setMonthlySummary(null);
+        setBudget(null);
+        setBudgetAmount('');
+        setError('Session expired. Please login again.');
+      } else {
+        setError(e.message || 'Failed to load');
+      }
     } finally {
       setLoading(false);
     }
@@ -123,12 +143,12 @@ export default function App() {
   useEffect(() => {
     refreshAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected.year, selected.month]);
+  }, [selected.year, selected.month, isAuthed]);
 
   useEffect(() => {
     refreshAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.type, filters.categoryId, filters.from, filters.to]);
+  }, [filters.type, filters.categoryId, filters.from, filters.to, isAuthed]);
 
   const categoryById = useMemo(() => {
     const map = new Map();
@@ -247,6 +267,11 @@ export default function App() {
     e.preventDefault();
     setError('');
 
+    if (!isAuthed) {
+      setError('Please login to continue');
+      return;
+    }
+
     const payload = {
       type: form.type,
       amount: Number(form.amount),
@@ -257,9 +282,9 @@ export default function App() {
 
     try {
       if (form.id) {
-        await api.updateTransaction(form.id, payload);
+        await api.updateTransaction(form.id, payload, auth.token);
       } else {
-        await api.createTransaction(payload);
+        await api.createTransaction(payload, auth.token);
       }
 
       setForm({
@@ -291,7 +316,7 @@ export default function App() {
   async function onDeleteTx(id) {
     setError('');
     try {
-      await api.deleteTransaction(id);
+      await api.deleteTransaction(id, auth.token);
       await refreshAll();
     } catch (e) {
       setError(e.message || 'Failed');
@@ -301,11 +326,16 @@ export default function App() {
   async function onCreateCategory(e) {
     e.preventDefault();
     setError('');
+
+    if (!isAuthed) {
+      setError('Please login to continue');
+      return;
+    }
     try {
       await api.createCategory({
         name: newCategory.name,
         color: newCategory.color,
-      });
+      }, auth.token);
       setNewCategory({ name: '', color: '#64748b' });
       await refreshAll();
     } catch (e2) {
@@ -316,7 +346,7 @@ export default function App() {
   async function onDeleteCategory(id) {
     setError('');
     try {
-      await api.deleteCategory(id);
+      await api.deleteCategory(id, auth.token);
       await refreshAll();
     } catch (e) {
       setError(e.message || 'Failed');
@@ -326,9 +356,14 @@ export default function App() {
   async function onSaveBudget(e) {
     e.preventDefault();
     setError('');
+
+    if (!isAuthed) {
+      setError('Please login to continue');
+      return;
+    }
     try {
       const amt = Number(budgetAmount || 0);
-      const res = await api.upsertBudget({ year: selected.year, month: selected.month, amount: amt });
+      const res = await api.upsertBudget({ year: selected.year, month: selected.month, amount: amt }, auth.token);
       setBudget(res.budget);
       await refreshAll();
     } catch (e2) {
@@ -364,6 +399,11 @@ export default function App() {
 
   function logout() {
     setAuth({ token: '', user: null });
+    setCategories([]);
+    setTx([]);
+    setMonthlySummary(null);
+    setBudget(null);
+    setBudgetAmount('');
   }
 
   return (
@@ -532,6 +572,12 @@ export default function App() {
       {error ? <div className="alert danger">{error}</div> : null}
       {budgetAlert ? <div className={`alert ${budgetAlert.kind}`}>{budgetAlert.text}</div> : null}
 
+      {!isAuthed ? (
+        <div className="alert">
+          Please login or signup to access your transactions.
+        </div>
+      ) : null}
+
       <div className="kpis">
         <div className="kpi">
           <div className="kpiLabel">Balance</div>
@@ -578,6 +624,7 @@ export default function App() {
                     value={form.amount}
                     onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                     required
+                    disabled={!isAuthed}
                   />
                 </div>
               </div>
@@ -590,6 +637,7 @@ export default function App() {
                     value={form.date}
                     onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                     required
+                    disabled={!isAuthed}
                   />
                 </div>
 
@@ -598,6 +646,7 @@ export default function App() {
                   <select
                     value={form.categoryId}
                     onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+                    disabled={!isAuthed}
                   >
                     <option value="">Uncategorized</option>
                     {categories.map((c) => (
@@ -615,17 +664,19 @@ export default function App() {
                   value={form.note}
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                   placeholder="e.g., groceries / salary"
+                  disabled={!isAuthed}
                 />
               </div>
 
               <div className="row" style={{ marginTop: 12 }}>
-                <button type="submit" disabled={loading}>
+                <button type="submit" disabled={!isAuthed || loading}>
                   {form.id ? 'Update' : 'Add'}
                 </button>
                 {form.id ? (
                   <button
                     type="button"
                     className="secondary"
+                    disabled={!isAuthed}
                     onClick={() =>
                       setForm({
                         id: null,
@@ -656,10 +707,11 @@ export default function App() {
                     value={budgetAmount}
                     onChange={(e) => setBudgetAmount(e.target.value)}
                     placeholder="0"
+                    disabled={!isAuthed}
                   />
                 </div>
                 <div className="field" style={{ flex: 0, minWidth: 120, alignSelf: 'flex-end' }}>
-                  <button type="submit" className="secondary" disabled={loading}>
+                  <button type="submit" className="secondary" disabled={!isAuthed || loading}>
                     Save
                   </button>
                 </div>
@@ -678,6 +730,7 @@ export default function App() {
                     onChange={(e) => setNewCategory((c) => ({ ...c, name: e.target.value }))}
                     placeholder="e.g., Food"
                     required
+                    disabled={!isAuthed}
                   />
                 </div>
                 <div className="field" style={{ maxWidth: 140 }}>
@@ -686,11 +739,12 @@ export default function App() {
                     type="color"
                     value={newCategory.color}
                     onChange={(e) => setNewCategory((c) => ({ ...c, color: e.target.value }))}
+                    disabled={!isAuthed}
                   />
                 </div>
               </div>
               <div className="row" style={{ marginTop: 10 }}>
-                <button type="submit" className="secondary" disabled={loading}>Add category</button>
+                <button type="submit" className="secondary" disabled={!isAuthed || loading}>Add category</button>
               </div>
             </form>
 
@@ -704,6 +758,7 @@ export default function App() {
                     type="button"
                     className="danger"
                     style={{ padding: '4px 8px', borderRadius: 999 }}
+                    disabled={!isAuthed}
                     onClick={() => onDeleteCategory(c._id)}
                   >
                     Del
@@ -813,10 +868,10 @@ export default function App() {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div className="row" style={{ justifyContent: 'flex-end' }}>
-                            <button type="button" className="secondary" onClick={() => onEditTx(t)}>
+                            <button type="button" className="secondary" disabled={!isAuthed} onClick={() => onEditTx(t)}>
                               Edit
                             </button>
-                            <button type="button" className="danger" onClick={() => onDeleteTx(t._id)}>
+                            <button type="button" className="danger" disabled={!isAuthed} onClick={() => onDeleteTx(t._id)}>
                               Delete
                             </button>
                           </div>
